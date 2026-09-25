@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MOCK_MODE=true
+      - DATABASE_URL=sqlite:///./arena.db
+      # - OPENAI_API_KEY=your_key_here
+      # - ANTHROPIC_API_KEY=your_key_here
+    volumes:
+      - arena_data:/app
+    restart: unless-stopped
+
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  arena_data:

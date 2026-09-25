@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Model Testing Arena</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: 'Segoe UI', system-ui, sans-serif; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div class="max-w-5xl mx-auto px-6 py-10">
+    <h1 class="text-3xl font-bold mb-1">⚔️ AI Model Testing Arena</h1>
+    <p class="text-slate-400 mb-8">Blind head-to-head LLM comparisons, ranked with Elo.</p>
+
+    <!-- API base config -->
+    <div class="mb-6 flex items-center gap-2 text-sm text-slate-400">
+      <span>API URL:</span>
+      <input id="apiBase" value="http://localhost:8000" class="bg-slate-800 rounded px-2 py-1 w-64 text-slate-100" />
+    </div>
+
+    <!-- Prompt box -->
+    <div class="bg-slate-900 rounded-xl p-5 mb-8 border border-slate-800">
+      <textarea id="prompt" rows="3" placeholder="Ask something... e.g. Explain how binary search works"
+        class="w-full bg-slate-800 rounded-lg p-3 text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+      <button id="battleBtn" class="mt-3 bg-indigo-600 hover:bg-indigo-500 px-5 py-2 rounded-lg font-medium">
+        Start Battle
+      </button>
+      <span id="loading" class="ml-3 text-slate-400 hidden">Fetching responses…</span>
+    </div>
+
+    <!-- Battle arena -->
+    <div id="arena" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 hidden">
+      <div class="bg-slate-900 rounded-xl p-5 border border-slate-800">
+        <h3 class="font-semibold mb-2 text-indigo-400">Response A</h3>
+        <p id="responseA" class="text-slate-200 whitespace-pre-wrap mb-3"></p>
+        <p class="text-xs text-slate-500" id="metaA"></p>
+        <button onclick="vote('a')" class="mt-3 w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg">
+          Vote A Better
+        </button>
+      </div>
+      <div class="bg-slate-900 rounded-xl p-5 border border-slate-800">
+        <h3 class="font-semibold mb-2 text-indigo-400">Response B</h3>
+        <p id="responseB" class="text-slate-200 whitespace-pre-wrap mb-3"></p>
+        <p class="text-xs text-slate-500" id="metaB"></p>
+        <button onclick="vote('b')" class="mt-3 w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg">
+          Vote B Better
+        </button>
+      </div>
+      <div class="md:col-span-2 text-center">
+        <button onclick="vote('tie')" class="text-slate-400 hover:text-slate-200 text-sm underline">
+          It's a tie / both bad
+        </button>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="bg-slate-900 rounded-xl p-5 border border-slate-800">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="text-xl font-semibold">🏆 Leaderboard</h2>
+        <button onclick="loadLeaderboard()" class="text-sm text-indigo-400 hover:underline">Refresh</button>
+      </div>
+      <table class="w-full text-sm">
+        <thead class="text-slate-400 text-left border-b border-slate-800">
+          <tr>
+            <th class="py-2">Model</th>
+            <th>Elo</th>
+            <th>W</th>
+            <th>L</th>
+            <th>T</th>
+            <th>Avg Latency</th>
+            <th>Avg Cost</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboardBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+let currentBattleId = null;
+
+function apiUrl() {
+  return document.getElementById('apiBase').value.replace(/\/$/, '');
+}
+
+document.getElementById('battleBtn').addEventListener('click', startBattle);
+
+async function startBattle() {
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt) { alert('Enter a prompt first'); return; }
+
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('arena').classList.add('hidden');
+
+  try {
+    const res = await fetch(`${apiUrl()}/battle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    currentBattleId = data.battle_id;
+
+    document.getElementById('responseA').innerText = data.response_a;
+    document.getElementById('responseB').innerText = data.response_b;
+    document.getElementById('metaA').innerText =
+      `${data.latency_a_ms.toFixed(0)} ms · $${data.cost_a_usd.toFixed(6)}`;
+    document.getElementById('metaB').innerText =
+      `${data.latency_b_ms.toFixed(0)} ms · $${data.cost_b_usd.toFixed(6)}`;
+
+    // stash model names (revealed after voting) as data attributes
+    document.getElementById('arena').dataset.modelA = data.model_a;
+    document.getElementById('arena').dataset.modelB = data.model_b;
+
+    document.getElementById('arena').classList.remove('hidden');
+  } catch (e) {
+    alert('Could not reach API. Check the API URL and that the backend is running.');
+    console.error(e);
+  } finally {
+    document.getElementById('loading').classList.add('hidden');
+  }
+}
+
+async function vote(choice) {
+  if (!currentBattleId) return;
+  const res = await fetch(`${apiUrl()}/vote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ battle_id: currentBattleId, choice })
+  });
+  if (res.ok) {
+    const arena = document.getElementById('arena');
+    alert(`Model A was: ${arena.dataset.modelA}\nModel B was: ${arena.dataset.modelB}`);
+    currentBattleId = null;
+    document.getElementById('arena').classList.add('hidden');
+    document.getElementById('prompt').value = '';
+    loadLeaderboard();
+  } else {
+    alert('Vote failed — this battle may already be voted on.');
+  }
+}
+
+async function loadLeaderboard() {
+  try {
+    const res = await fetch(`${apiUrl()}/leaderboard`);
+    const rows = await res.json();
+    const body = document.getElementById('leaderboardBody');
+    body.innerHTML = rows.map(r => `
+      <tr class="border-b border-slate-800/50">
+        <td class="py-2 font-medium">${r.model_name}</td>
+        <td>${r.elo_rating.toFixed(1)}</td>
+        <td>${r.wins}</td>
+        <td>${r.losses}</td>
+        <td>${r.ties}</td>
+        <td>${r.avg_latency_ms.toFixed(0)} ms</td>
+        <td>$${r.avg_cost_usd.toFixed(6)}</td>
+      </tr>
+    `).join('') || '<tr><td class="py-3 text-slate-500" colspan="7">No battles yet — start one above.</td></tr>';
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+loadLeaderboard();
+</script>
+</body>
+</html>
