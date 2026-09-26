@@ -69,4 +69,4 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ai-model-arena:latest
+          tags: ghcr.io/mohitha647/ai-model-arena:latest
